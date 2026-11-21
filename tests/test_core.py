@@ -192,6 +192,7 @@ class TestPublicOnboardingAndSecurity(unittest.TestCase):
                 self.assertEqual(db.list_wallets(), [])
                 self.assertEqual(db.list_members(), [])
                 poller = BackgroundPoller(db, PoolScraper())
+                poller.fetch_wallet_once = lambda *a, **kw: None  # type: ignore[method-assign]
                 api = DesktopApi(db, poller)
 
                 st0 = api.get_state()
@@ -224,12 +225,16 @@ class TestPublicOnboardingAndSecurity(unittest.TestCase):
                 # Empty friend DB can directly import a host sync bundle without pre-existing wallet
                 host_db = Database(Path(tmp) / "host.db")
                 try:
-                    host_api = DesktopApi(host_db, BackgroundPoller(host_db, PoolScraper()))
+                    host_poller = BackgroundPoller(host_db, PoolScraper())
+                    host_poller.fetch_wallet_once = lambda *a, **kw: None  # type: ignore[method-assign]
+                    host_api = DesktopApi(host_db, host_poller)
                     host_api.complete_onboarding({"address_or_url": DEMO_WALLET, "alias": "主节点钱包"})
                     sync_pkg = host_api.get_wallet_sync_bundle(host_db.list_wallets()[0]["id"])
                     fresh_friend_db = Database(Path(tmp) / "fresh_friend.db")
                     try:
-                        ff_api = DesktopApi(fresh_friend_db, BackgroundPoller(fresh_friend_db, PoolScraper()))
+                        ff_poller = BackgroundPoller(fresh_friend_db, PoolScraper())
+                        ff_poller.fetch_wallet_once = lambda *a, **kw: None  # type: ignore[method-assign]
+                        ff_api = DesktopApi(fresh_friend_db, ff_poller)
                         imp = ff_api.import_sync_payload(sync_pkg["sync_code"], sync_members=True)
                         self.assertTrue(imp["import_result"]["wallet_created"])
                         self.assertFalse(imp["state"]["needs_onboarding"])
@@ -2104,3 +2109,73 @@ class TestDatabaseOfflineAndSettlementFlow(unittest.TestCase):
             self.assertEqual(len(desktop_sent), 0)
         finally:
             ctrl.stop()
+
+
+class TestSingleInstanceGuard(unittest.TestCase):
+    def test_single_instance_lock_wake_and_release(self) -> None:
+        import os
+        import threading
+        import uuid
+        from pearl_split.single_instance import SingleInstanceGuard, bring_window_to_front
+
+        with tempfile.TemporaryDirectory() as td:
+            dir_a = Path(td) / f"inst_a_{uuid.uuid4().hex[:8]}"
+            dir_b = Path(td) / f"inst_b_{uuid.uuid4().hex[:8]}"
+            dir_a.mkdir(parents=True, exist_ok=True)
+            dir_b.mkdir(parents=True, exist_ok=True)
+
+            woke_event = threading.Event()
+            wake_calls: list[int] = []
+
+            def on_wake() -> None:
+                wake_calls.append(1)
+                woke_event.set()
+
+            guard1 = SingleInstanceGuard(dir_a)
+            guard_other = SingleInstanceGuard(dir_b)
+            try:
+                self.assertTrue(guard1.acquire_or_activate())
+                guard1.start_wake_listener(on_wake)
+
+                variant = Path(f"{dir_a}".upper() + os.sep + ".")
+                guard2 = SingleInstanceGuard(variant)
+                self.assertFalse(guard2.acquire_or_activate())
+                self.assertTrue(woke_event.wait(timeout=2.0))
+                self.assertEqual(len(wake_calls), 1)
+
+                # Auto-reset wake event allows subsequent relaunches to wake again
+                woke_event.clear()
+                guard3 = SingleInstanceGuard(dir_a)
+                self.assertFalse(guard3.acquire_or_activate())
+                self.assertTrue(woke_event.wait(timeout=2.0))
+                self.assertEqual(len(wake_calls), 2)
+
+                # Separate data_dir runs independently
+                self.assertTrue(guard_other.acquire_or_activate())
+            finally:
+                guard_other.release()
+                guard1.release()
+
+            # Once released, a fresh primary instance acquires cleanly
+            guard_re = SingleInstanceGuard(dir_a)
+            try:
+                self.assertTrue(guard_re.acquire_or_activate())
+            finally:
+                guard_re.release()
+
+            # Mock window bring_window_to_front helper invokes show & restore safely
+            calls: list[str] = []
+
+            class DummyWin:
+                def show(self) -> None:
+                    calls.append("show")
+
+                def restore(self) -> None:
+                    calls.append("restore")
+
+            bring_window_to_front(DummyWin())
+            self.assertEqual(calls, ["show", "restore", "show"])
+
+
+if __name__ == "__main__":
+    unittest.main()

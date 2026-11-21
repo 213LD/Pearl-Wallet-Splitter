@@ -17,6 +17,7 @@ from pearl_split.miner_binder import LocalMinerBinder
 from pearl_split.paths import get_asset_path, get_data_dir, get_db_path, get_web_dir
 from pearl_split.poller import BackgroundPoller
 from pearl_split.scraper import PoolScraper
+from pearl_split.single_instance import SingleInstanceGuard, bring_window_to_front
 
 
 def _load_tray_image() -> Image.Image:
@@ -27,6 +28,16 @@ def _load_tray_image() -> Image.Image:
 
 
 def main() -> None:
+    single_instance = SingleInstanceGuard(get_data_dir())
+    if not single_instance.acquire_or_activate():
+        return
+    try:
+        _run_app(single_instance)
+    finally:
+        single_instance.release()
+
+
+def _run_app(single_instance: SingleInstanceGuard) -> None:
     db = Database(get_db_path())
     scraper = PoolScraper()
 
@@ -87,6 +98,7 @@ def main() -> None:
         collector_server.stop()
         poller.stop()
         db.close()
+        single_instance.release()
 
     def shutdown_app() -> None:
         window_holder["force_exit"] = True
@@ -103,11 +115,7 @@ def main() -> None:
             pass
 
     def show_window() -> None:
-        try:
-            window.show()
-            window.restore()
-        except Exception:
-            pass
+        bring_window_to_front(window)
 
     def on_closing() -> bool:
         if window_holder["force_exit"]:
@@ -141,6 +149,7 @@ def main() -> None:
 
     def on_started() -> None:
         setup_tray()
+        single_instance.start_wake_listener(show_window)
         poller.start()
         miner_binder.start_background_pusher()
 

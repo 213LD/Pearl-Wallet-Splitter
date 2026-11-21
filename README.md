@@ -114,7 +114,7 @@ pip install -r requirements.txt
 # 启动桌面应用
 python main.py
 
-# 运行单元测试（28 项测试，含编码安全、自定义流水线、Docker 主备等）
+# 运行单元测试（29 项测试，含单实例唤醒、编码安全、自定义流水线、Docker 主备等）
 python -m unittest discover -s tests -v
 
 # 打包单文件 EXE（输出位于 dist\PearlSplit.exe）
@@ -163,12 +163,13 @@ Pearl-Wallet-Splitter/
 │   ├── collector_server.py      # 独立 HTTP 服务端（矿机遥测汇聚、Web 状态页与 Docker 独立热备值守进程）
 │   ├── collector_kits.py        # PowerShell/Docker 客户端及服务端一键部署包生成器（自动注入强鉴权配置指引）
 │   ├── paths.py                 # 兼容源码运行与 PyInstaller 单文件运行时的资源与数据路径解析
+│   ├── single_instance.py       # Windows 单实例互斥锁与二次启动唤醒后台窗口前台置顶工具
 │   └── web/
 │       ├── index.html           # 单页应用骨架、首次引导向导及各功能模块视图
 │       ├── styles.css           # 深色工业风 UI 样式、响应式卡片与抽屉/弹窗层叠样式
 │       └── app.js               # 前端交互逻辑、动态手续费模板编辑器、状态轮询与通知中心
 └── tests/
-    └── test_core.py             # 28 项单元测试（分账、离线缓存、同步码、自定义手续费、安全加固、Docker 包等）
+    └── test_core.py             # 29 项单元测试（分账、离线缓存、单实例唤醒、同步码、自定义手续费、安全加固等）
 ```
 
 ---
