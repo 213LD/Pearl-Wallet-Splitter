@@ -1,0 +1,30 @@
+# Build & Packaging Artifacts
+build/
+dist/
+*.spec
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local Runtime Data & Databases (NEVER commit personal data)
+data/
+exports/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+*.bat.bak
+
+# Virtual Environments & IDE
+.venv/
+venv/
+.pytest_cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary Demo / Screenshot Staging
+docs/_demo_tmp/
